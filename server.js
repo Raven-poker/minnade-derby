@@ -320,7 +320,7 @@ function startRace(roomId) {
       room.raceProgress[i] = maxShown[i];
 
       // Fire when runner reaches 90% of total distance — tape-break aligns with visual crossing
-      if (!finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.90)) {
+      if (!finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.95)) {
         finished.add(i);
         finishRank++;
         newFinishers.push({ horse: i, rank: finishRank });
