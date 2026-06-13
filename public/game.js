@@ -19,6 +19,8 @@ let horses = [], phase = 'waiting', myMedals = 0;
 let betState  = { tansho: {}, nirenfuku: {} };
 let countdown = null;
 let finishedSet = new Set();
+let currentLaps = 1;
+let isG1Race    = false;
 const OVERSHOOT = 112;
 
 // Finish-line zoom
@@ -113,9 +115,11 @@ function handle(msg) {
 
 // ===== State =====
 function applyState(state) {
-  phase    = state.phase;
-  horses   = state.horses || [];
-  betState = state.myBets || { tansho: {}, nirenfuku: {} };
+  phase       = state.phase;
+  horses      = state.horses || [];
+  betState    = state.myBets || { tansho: {}, nirenfuku: {} };
+  currentLaps = state.laps  ?? 1;
+  isG1Race    = state.isG1  ?? false;
   finishedSet = new Set();
   resetZoom();
 
@@ -145,14 +149,17 @@ function updatePhaseUI() {
   svg.classList.toggle('racing', phase === 'racing');
   document.getElementById('nirenfukuBtn').disabled = phase !== 'betting';
 
-  if      (phase === 'betting') { label.textContent = '🎰 ベット受付中！'; timer.classList.remove('hidden'); }
-  else if (phase === 'racing')  { label.textContent = '🏃 レース中！';      timer.classList.add('hidden'); }
-  else if (phase === 'result')  { label.textContent = '🏆 結果発表';        timer.classList.add('hidden'); }
-  else                          { label.textContent = '⏳ 待機中...';       timer.classList.add('hidden'); }
+  const g1Tag  = isG1Race ? '🏆G1 ' : '';
+  const lapTag = currentLaps === 2 ? '2周' : '1周';
+  if      (phase === 'betting') { label.innerHTML = `${g1Tag}🎰 ${lapTag}レース ベット受付中！`; timer.classList.remove('hidden'); }
+  else if (phase === 'racing')  { label.innerHTML = `${g1Tag}🏃 ${lapTag}レース中！`;            timer.classList.add('hidden'); }
+  else if (phase === 'result')  { label.innerHTML = `${g1Tag}🏆 結果発表`;                       timer.classList.add('hidden'); }
+  else                          { label.textContent = '⏳ 待機中...';                             timer.classList.add('hidden'); }
 
-  // Show finish tape only during racing
+  // 1-lap: show tape immediately when racing starts
+  // 2-lap: tape is hidden until final stretch (managed in updateProgress)
   const tape = document.getElementById('finishTape');
-  if (tape) tape.setAttribute('opacity', phase === 'racing' ? '0.9' : '0');
+  if (tape) tape.setAttribute('opacity', (phase === 'racing' && currentLaps === 1) ? '0.9' : '0');
 }
 
 function updateTimer(t) {
@@ -188,17 +195,23 @@ function initRunners() {
 
 // ===== Race animation =====
 function updateProgress(progress) {
+  const cap = currentLaps * 100 - 1;
   progress.forEach((pct, i) => {
     if (finishedSet.has(i)) return;
     const el = document.getElementById(`svgRunner-${i}`);
     if (!el) return;
-    // Just move — finish animation is triggered by horseFinished event from server
-    const pos = lanePos(Math.min(pct, 99), i);
+    const pos = lanePos(Math.min(pct, cap), i);
     el.setAttribute('transform', `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})`);
   });
-  // Zoom in when the leader approaches the finish line
-  const leader = Math.max(...progress);
-  if (leader >= 82 && zoomState === 'out') zoomIn();
+  const leader      = Math.max(...progress);
+  const zoomTrigger = (currentLaps - 1) * 100 + 82;
+  if (leader >= zoomTrigger && zoomState === 'out') zoomIn();
+
+  // For 2-lap races: reveal finish tape once pack is well into final lap
+  if (currentLaps === 2) {
+    const tape = document.getElementById('finishTape');
+    if (tape) tape.setAttribute('opacity', leader >= 150 ? '0.9' : '0');
+  }
 }
 
 function onHorseFinished(horse, rank) {
@@ -384,6 +397,12 @@ function histBadgeHtml(pos) {
   return '<span class="hist-badge hist-null">－</span>';
 }
 
+function typeBadgeHtml(ht) {
+  if (ht === 'senkou') return '<span class="type-badge type-senkou">先行</span>';
+  if (ht === 'sashi')  return '<span class="type-badge type-sashi">差し</span>';
+  return '<span class="type-badge type-normal">普通</span>';
+}
+
 function renderRunnerInfoRows() {
   const container = document.getElementById('runnerInfoRows');
   container.innerHTML = '';
@@ -397,10 +416,11 @@ function renderRunnerInfoRows() {
     row.innerHTML = `
       <div class="runner-num-dot" style="background:${h.color}">${i + 1}</div>
       <div class="runner-details">
-        <div class="runner-name">${h.name}</div>
+        <div class="runner-name">${h.name}${h.special ? ' <span class="special-star">★</span>' : ''}</div>
         <div class="runner-meta">
           <span class="cond-badge ${condClass(h.cond)}">${h.cond}</span>
           <span class="cond-badge ${condClass(h.health)}">${h.health}</span>
+          ${typeBadgeHtml(h.horseType)}
           <span class="runner-odds">${h.tanshoOdds}倍</span>
         </div>
         ${histRow}
@@ -506,7 +526,7 @@ function updateNirenfukuPreview() {
 
 // ===== Result =====
 function showResult(msg) {
-  const { first, second, tanshoOdds, nirenfukuOdds, payouts, medals, leaderboard: lb } = msg;
+  const { first, second, tanshoOdds, nirenfukuOdds, payouts, medals, leaderboard: lb, isG1, g1Mult } = msg;
   showRankBadges(first, second);
 
   const h1 = horses[first], h2 = horses[second];
@@ -519,8 +539,11 @@ function showResult(msg) {
       <div class="result-place-label">🥈 2着</div>
       <div class="result-place-name" style="color:${h2.color}">${second+1}. ${h2.name}</div>
     </div>`;
+  const g1BonusHtml = isG1 && g1Mult > 1
+    ? `　<span class="g1-bonus">🏆G1 ${g1Mult}倍ボーナス適用！</span>`
+    : '';
   document.getElementById('resultOdds').innerHTML =
-    `単勝: <strong>${tanshoOdds}倍</strong>　2連複: <strong>${nirenfukuOdds}倍</strong>`;
+    `単勝: <strong>${tanshoOdds}倍</strong>　2連複: <strong>${nirenfukuOdds}倍</strong>${g1BonusHtml}`;
 
   const payout   = payouts[clientId] || 0;
   const invested = Object.values(betState.tansho||{}).reduce((s,a)=>s+a,0)

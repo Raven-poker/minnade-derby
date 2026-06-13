@@ -232,3 +232,25 @@ header h1 { font-size: 1.3rem; color: #ffd700; text-shadow: 0 0 10px #ffd70055; 
 #toast.show { transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 720px) { #mainArea { grid-template-columns: 1fr; } }
+
+/* ===== HORSE TYPE BADGES ===== */
+.type-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 0.62rem; font-weight: 800; white-space: nowrap; letter-spacing: 0.02em;
+}
+.type-senkou { background: #1a0a0a; color: #ff7043; border: 1px solid #8b2500; }
+.type-sashi  { background: #0a0a1a; color: #5c9bff; border: 1px solid #0050cc; }
+.type-normal { background: #141828; color: #7080a0; border: 1px solid #2a3050; }
+
+/* Special horse star */
+.special-star { color: #ffd700; font-style: normal; font-size: 0.75rem; }
+
+/* G1 bonus label in result */
+.g1-bonus {
+  display: inline-block; padding: 2px 9px; border-radius: 6px;
+  background: #2a1a00; border: 1px solid #c0860a;
+  color: #ffd700; font-size: 0.8rem; font-weight: bold;
+}
+
+/* #totalBetDisplay helper */
+#totalBetDisplay { font-size: 0.75rem; color: #a0b0d0; padding: 4px 0; }

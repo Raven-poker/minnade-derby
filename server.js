@@ -9,24 +9,27 @@ const wss = new WebSocketServer({ server });
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Regular runners pool — 6 chosen randomly per race
+// type: 'senkou' = front runner (fast early, slight late fade)
+//       'sashi'  = closer (conservative start, explosive final kick)
+//       'normal' = balanced
 const RUNNER_TEMPLATES = [
-  { name: 'ダニエルレイブン',     color: '#ff6348' },
-  { name: 'ファビエルナカター',   color: '#1e90ff' },
-  { name: 'ハカタノシオー',       color: '#ff4757' },
-  { name: 'イガラシロングアゴー', color: '#2ed573' },
-  { name: 'ミヤザキビックバット', color: '#ffa502' },
-  { name: 'シャラップコバヤシ',   color: '#a29bfe' },
-  { name: 'カネシゲロフトキッス', color: '#fd79a8' },
-  { name: 'ヨシダアパホテル',     color: '#fdcb6e' },
-  { name: 'サイトウギンギンオー', color: '#ffd32a' },
-  { name: 'アンパンチトミザワ',   color: '#7bed9f' },
+  { name: 'ダニエルレイブン',     color: '#ff6348', type: 'senkou' },
+  { name: 'ファビエルナカター',   color: '#1e90ff', type: 'sashi'  },
+  { name: 'ハカタノシオー',       color: '#ff4757', type: 'senkou' },
+  { name: 'イガラシロングアゴー', color: '#2ed573', type: 'sashi'  },
+  { name: 'ミヤザキビックバット', color: '#ffa502', type: 'normal' },
+  { name: 'シャラップコバヤシ',   color: '#a29bfe', type: 'sashi'  },
+  { name: 'カネシゲロフトキッス', color: '#fd79a8', type: 'normal' },
+  { name: 'ヨシダアパホテル',     color: '#fdcb6e', type: 'senkou' },
+  { name: 'サイトウギンギンオー', color: '#ffd32a', type: 'normal' },
+  { name: 'アンパンチトミザワ',   color: '#7bed9f', type: 'sashi'  },
 ];
 
 // Special strong runners — each has ~1/3 chance per race
 const SPECIAL_RUNNERS = [
-  { name: 'レイブンオザワー',   color: '#ff6b9d', special: true },
-  { name: 'カネシゲネオー',     color: '#00d4aa', special: true },
-  { name: 'ファビエルニヒロー', color: '#ff9500', special: true },
+  { name: 'レイブンオザワー',   color: '#ff6b9d', special: true, type: 'senkou' },
+  { name: 'カネシゲネオー',     color: '#00d4aa', special: true, type: 'sashi'  },
+  { name: 'ファビエルニヒロー', color: '#ff9500', special: true, type: 'normal' },
 ];
 
 const BASE_PROBS_6 = [0.30, 0.24, 0.18, 0.14, 0.09, 0.05];
@@ -55,6 +58,13 @@ function shuffle(arr) {
   return a;
 }
 
+function getLapsForRace(raceCount) {
+  return raceCount % 2 === 1 ? 1 : 2;   // odd race# = 1 lap, even = 2 laps
+}
+function isG1Race(raceCount) {
+  return raceCount > 0 && raceCount % 5 === 0;  // every 5th race is G1 (always 2 laps)
+}
+
 // Returns last 3 finish positions (1/2/3=3rd+/null=didn't run) for a horse by name
 function lookupHistory(name, history) {
   const result = history.slice(-3).map(past => {
@@ -67,17 +77,28 @@ function lookupHistory(name, history) {
   return result;
 }
 
-function generateHorses(history = []) {
-  const specials = SPECIAL_RUNNERS.filter(() => Math.random() < 1 / 3);
-  const n = specials.length;
-  const regulars = shuffle([...RUNNER_TEMPLATES]).slice(0, 6 - n);
+function generateHorses(history = [], isG1 = false) {
+  // G1: only horses with ≥1 top-2 finish recently (need ≥3 eligible; else fall back to all)
+  let regularPool = [...RUNNER_TEMPLATES];
+  if (isG1) {
+    const eligible = RUNNER_TEMPLATES.filter(h =>
+      lookupHistory(h.name, history).some(r => r === 1 || r === 2)
+    );
+    if (eligible.length >= 3) regularPool = eligible;
+  }
+
+  // G1: all special runners always appear; normal: ~1/3 chance each
+  const specials = isG1 ? [...SPECIAL_RUNNERS] : SPECIAL_RUNNERS.filter(() => Math.random() < 1 / 3);
+  const n = Math.min(specials.length, 5);
+  const selectedSpecials = specials.slice(0, n);
+  const regulars = shuffle(regularPool).slice(0, 6 - n);
 
   const sorted       = [...BASE_PROBS_6].sort((a, b) => b - a);
   const specialProbs = sorted.slice(0, n);
   const regularProbs = shuffle(sorted.slice(n));
 
   const pool = shuffle([
-    ...specials.map((h, i) => ({ ...h, baseProb: specialProbs[i] })),
+    ...selectedSpecials.map((h, i) => ({ ...h, baseProb: specialProbs[i] })),
     ...regulars.map((h, i) => ({ ...h, baseProb: regularProbs[i] })),
   ]);
 
@@ -89,7 +110,7 @@ function generateHorses(history = []) {
     const histMod     = recentHist.reduce((s, p) =>
       p === 1 ? s + 0.02 : p === 2 ? s + 0.01 : p === 3 ? s - 0.01 : s, 0);
     const raw = Math.max(0.01, h.baseProb * v + COND_MOD[cond] + COND_MOD[health] + histMod);
-    return { ...h, cond, health, winProb: raw, history: recentHist };
+    return { ...h, cond, health, winProb: raw, history: recentHist, horseType: h.type || 'normal' };
   });
 
   const total = horses.reduce((s, h) => s + h.winProb, 0);
@@ -153,6 +174,7 @@ function publicState(room, clientId) {
     myMedals:  clientId != null ? (room.medals[clientId] ?? room.startingMedals) : null,
     myBets:    clientId != null ? (room.bets[clientId] || { tansho: {}, nirenfuku: {} }) : null,
     leaderboard: leaderboard(room),
+    laps: room.laps || 1, isG1: room.isG1 || false, raceCount: room.raceCount || 0,
   };
 }
 
@@ -163,6 +185,7 @@ function createRoom(startingMedals) {
     horses: [], bets: {}, medals: {}, playerColors: {},
     _colorIndex: 0, raceResult: null, raceProgress: [],
     timer: 30, _timers: [], raceHistory: [],
+    raceCount: 0, laps: 1, isG1: false,
   };
   rooms.set(id, room);
   room._timers.push(setTimeout(() => startBetting(id), 1500));
@@ -184,12 +207,17 @@ function startBetting(roomId) {
     room._timers.push(setTimeout(() => startBetting(roomId), 3000));
     return;
   }
-  room.phase       = PHASE.BETTING;
-  room.horses      = generateHorses(room.raceHistory);
-  room.bets        = {};
-  room.raceResult  = null;
+  // Advance race counter and determine format
+  room.raceCount++;
+  room.isG1  = isG1Race(room.raceCount);
+  room.laps  = room.isG1 ? 2 : getLapsForRace(room.raceCount);
+
+  room.phase        = PHASE.BETTING;
+  room.horses       = generateHorses(room.raceHistory, room.isG1);
+  room.bets         = {};
+  room.raceResult   = null;
   room.raceProgress = room.horses.map(() => 0);
-  room.timer       = 30;
+  room.timer        = 30;
 
   roomClients(roomId).forEach(({ clientId }) => {
     room.bets[clientId] = { tansho: {}, nirenfuku: {} };
@@ -227,52 +255,70 @@ function startRace(roomId) {
   room.phase        = PHASE.RACING;
   room.raceResult   = simulateRace(room);
   room.raceProgress = room.horses.map(() => 0);
+
+  const laps           = room.laps || 1;
+  const targetProgress = laps * 100;
+
   broadcast(roomId, { type: 'stateUpdate', state: publicState(room) });
 
   const [r0, r1] = room.raceResult;
 
-  // Very tight finish gap — max 6 ticks = 1.2 s difference, keeps pack together
-  const winnerTicks = 78 + Math.floor(Math.random() * 8);
+  // Scale finish ticks with laps — keeps per-lap pace identical
+  const baseWinner = 78 + Math.floor(Math.random() * 8);
   const ft = {};
-  ft[r0] = winnerTicks;
-  ft[r1] = winnerTicks + 2 + Math.floor(Math.random() * 2);         // +2 or +3
+  ft[r0] = baseWinner * laps;
+  ft[r1] = (baseWinner + 2 + Math.floor(Math.random() * 2)) * laps;
   room.horses.forEach((_, i) => {
-    if (i !== r0 && i !== r1) ft[i] = winnerTicks + 3 + Math.floor(Math.random() * 4); // +3–6
+    if (i !== r0 && i !== r1)
+      ft[i] = (baseWinner + 3 + Math.floor(Math.random() * 4)) * laps;
   });
   const maxTicks = Math.max(...Object.values(ft)) + 4;
 
-  // ~half of non-winners get a subtle まくり kick in the final 25% of their race
+  // Makuri set — horse type determines likelihood
+  // 差し型: always in makuriSet (late kick is their style)
+  // 先行型: 20% chance (they lead, rarely need a kick)
+  // normal: 50% chance
   const makuriSet = new Set();
-  room.horses.forEach((_, i) => { if (i !== r0 && Math.random() < 0.5) makuriSet.add(i); });
+  room.horses.forEach((h, i) => {
+    if (i === r0) return;
+    const ht = h.horseType || 'normal';
+    const p  = ht === 'sashi' ? 1.0 : ht === 'senkou' ? 0.2 : 0.5;
+    if (Math.random() < p) makuriSet.add(i);
+  });
 
-  // maxShown[i] = highest progress ever shown — guarantees no backward movement
-  const maxShown = room.horses.map(() => 0);
-  // finished tracks exact finish order based on ft[] — deterministic, matches raceResult
-  const finished = new Set();
-  let finishRank = 0;
+  const maxShown  = room.horses.map(() => 0);
+  const finished  = new Set();
+  let   finishRank = 0;
 
   let tick = 0;
   const iv = setInterval(() => {
     tick++;
     const newFinishers = [];
 
-    room.horses.forEach((_, i) => {
-      if (room.raceProgress[i] >= 100) return;
+    room.horses.forEach((h, i) => {
+      if (room.raceProgress[i] >= targetProgress) return;
       const t    = Math.min(tick / ft[i], 1.0);
-      // Smooth S-curve: all runners share the same base shape — pack stays close
       const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const ht   = h.horseType || 'normal';
 
-      // Mild まくり kick in final quarter: max +5%, monotonically increasing
-      const kick = makuriSet.has(i) && t > 0.75
-        ? Math.min(0.05, (t - 0.75) * 0.20)
+      // 先行型: brief early boost (bell-curve over first 20% of race)
+      const earlyBoost = (ht === 'senkou' && t < 0.20)
+        ? 0.04 * Math.sin((t / 0.20) * Math.PI)
         : 0;
 
+      // まくり kick — 差し型 starts earlier (65%) and goes harder (max +8%)
+      let kick = 0;
+      if (makuriSet.has(i)) {
+        kick = ht === 'sashi'
+          ? (t > 0.65 ? Math.min(0.08, (t - 0.65) * 0.267) : 0)
+          : (t > 0.75 ? Math.min(0.05, (t - 0.75) * 0.20)  : 0);
+      }
+
       const noise   = (Math.random() - 0.5) * 0.012;
-      const natural = Math.max(maxShown[i] / 100, ease + kick + noise);
-      maxShown[i]   = Math.min(100, Math.round(natural * 100));
+      const natural = Math.max(maxShown[i] / targetProgress, ease + kick + earlyBoost + noise);
+      maxShown[i]   = Math.min(targetProgress, Math.round(natural * targetProgress));
       room.raceProgress[i] = maxShown[i];
 
-      // Emit finish event the first tick this horse's scheduled time is reached
       if (!finished.has(i) && tick >= ft[i]) {
         finished.add(i);
         finishRank++;
@@ -280,7 +326,6 @@ function startRace(roomId) {
       }
     });
 
-    // Broadcast finish events BEFORE raceProgress so clients get rank before pct=100
     newFinishers.forEach(({ horse, rank }) =>
       broadcast(roomId, { type: 'horseFinished', horse, rank })
     );
@@ -301,18 +346,19 @@ function showResult(roomId) {
   if (!room) return;
   room.phase    = PHASE.RESULT;
   const [first, second] = room.raceResult;
-  const nfOdds  = nirenfukuOdds(room, first, second);
-  const nfKey   = `${Math.min(first, second)}-${Math.max(first, second)}`;
-  const payouts = {};
+  const nfOdds      = nirenfukuOdds(room, first, second);
+  const nfKey       = `${Math.min(first, second)}-${Math.max(first, second)}`;
+  const g1Mult      = room.isG1 ? 1.5 : 1.0;   // G1 pays 1.5× on all winnings
+  const payouts     = {};
 
   Object.entries(room.bets).forEach(([cid, bet]) => {
     let p = 0;
     Object.entries(bet.tansho || {}).forEach(([horse, amount]) => {
       if (parseInt(horse) === first)
-        p += Math.floor(amount * room.horses[first].tanshoOdds);
+        p += Math.floor(amount * room.horses[first].tanshoOdds * g1Mult);
     });
     if (bet.nirenfuku?.[nfKey])
-      p += Math.floor(bet.nirenfuku[nfKey].amount * nfOdds);
+      p += Math.floor(bet.nirenfuku[nfKey].amount * nfOdds * g1Mult);
     payouts[cid] = p;
     if (room.medals[cid] != null) room.medals[cid] += p;
   });
@@ -330,6 +376,7 @@ function showResult(roomId) {
     tanshoOdds: room.horses[first].tanshoOdds,
     nirenfukuOdds: nfOdds,
     payouts, medals: room.medals, leaderboard: leaderboard(room),
+    isG1: room.isG1, g1Mult,
   });
   room._timers.push(setTimeout(() => startBetting(roomId), 9000));
 }
