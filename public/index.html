@@ -113,12 +113,26 @@
           <ellipse cx="290" cy="145" rx="270" ry="136" fill="none" stroke="white" stroke-width="2.5"/>
           <ellipse cx="290" cy="145" rx="178" ry="50"  fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>
 
+          <!-- Distance markers (dashed lines across track + infield labels) -->
+          <!-- 200m = 25% = right side -->
+          <line x1="468" y1="145" x2="562" y2="145" stroke="rgba(255,255,150,0.45)" stroke-width="1.2" stroke-dasharray="3 4"/>
+          <text x="450" y="149" text-anchor="middle" fill="rgba(255,255,150,0.75)" font-size="8" font-family="sans-serif" font-weight="bold">200m</text>
+          <!-- 400m = 50% = bottom -->
+          <line x1="290" y1="197" x2="290" y2="280" stroke="rgba(255,255,150,0.45)" stroke-width="1.2" stroke-dasharray="3 4"/>
+          <text x="290" y="193" text-anchor="middle" fill="rgba(255,255,150,0.75)" font-size="8" font-family="sans-serif" font-weight="bold">400m</text>
+          <!-- 600m = 75% = left side -->
+          <line x1="18" y1="145" x2="112" y2="145" stroke="rgba(255,255,150,0.45)" stroke-width="1.2" stroke-dasharray="3 4"/>
+          <text x="132" y="149" text-anchor="middle" fill="rgba(255,255,150,0.75)" font-size="8" font-family="sans-serif" font-weight="bold">600m</text>
+
           <!-- Finish / Start line (top of oval) -->
           <rect x="286" y="9" width="8" height="86" fill="url(#checker)" opacity="0.95"/>
 
           <!-- 🏁 flag label -->
           <text x="302" y="32" fill="white" font-size="16" font-family="system-ui">🏁</text>
           <text x="300" y="50" fill="rgba(255,255,255,0.7)" font-size="9" font-family="sans-serif" font-weight="bold">GOAL</text>
+
+          <!-- Start label below finish line -->
+          <text x="300" y="65" fill="rgba(255,255,255,0.45)" font-size="7.5" font-family="sans-serif">START</text>
 
           <!-- "RUNNING DIRECTION" arrow on infield -->
           <text x="290" y="150" fill="rgba(255,255,255,0.35)" font-size="11" text-anchor="middle" font-family="sans-serif">↻ 時計回り</text>
@@ -162,30 +176,30 @@
       </div>
 
       <div class="bet-section">
-        <h3>🎯 2連単</h3>
-        <p class="bet-desc">1着・2着を順番通りに当てる</p>
-        <div class="nirentan-selects">
+        <h3>🎯 2連複</h3>
+        <p class="bet-desc">1着・2着に来る2頭を当てる（順番不問）</p>
+        <div class="nirenfuku-selects">
           <div>
-            <label>1着</label>
-            <select id="nirentanFirst"><option value="">選択</option></select>
+            <label>馬A</label>
+            <select id="nirenfukuA"><option value="">選択</option></select>
           </div>
           <div>
-            <label>2着</label>
-            <select id="nirentanSecond"><option value="">選択</option></select>
+            <label>馬B</label>
+            <select id="nirenfukuB"><option value="">選択</option></select>
           </div>
         </div>
-        <div id="nirentanOddsPreview" class="odds-preview"></div>
+        <div id="nirenfukuOddsPreview" class="odds-preview"></div>
         <div class="bet-amount-row">
           <label>枚数</label>
-          <div class="chip-buttons" data-target="nirentanAmount">
+          <div class="chip-buttons" data-target="nirenfukuAmount">
             <button class="chip-btn" data-val="10">10</button>
             <button class="chip-btn" data-val="50">50</button>
             <button class="chip-btn" data-val="100">100</button>
             <button class="chip-btn" data-val="500">500</button>
           </div>
-          <input type="number" id="nirentanAmount" value="100" min="10">
+          <input type="number" id="nirenfukuAmount" value="100" min="10">
         </div>
-        <button id="nirentanBtn" class="bet-btn" disabled>2連単を追加</button>
+        <button id="nirenfukuBtn" class="bet-btn" disabled>2連複を追加</button>
       </div>
 
       <div class="bet-section">
