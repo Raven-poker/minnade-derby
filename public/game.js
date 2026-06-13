@@ -19,7 +19,7 @@ let horses = [], phase = 'waiting', myMedals = 0;
 let betState  = { tansho: {}, nirenfuku: {} };
 let countdown = null;
 let finishedSet = new Set();
-const OVERSHOOT = 107;
+const OVERSHOOT = 112;
 
 // Finish-line zoom
 const VB_NORMAL = { x: 0,  y: 0, w: 580, h: 290 };
@@ -204,29 +204,33 @@ function updateProgress(progress) {
 function onHorseFinished(horse, rank) {
   if (finishedSet.has(horse)) return;
   finishedSet.add(horse);
-  if (rank === 1) zoomOut();
   triggerFinish(horse, rank);
 }
 
 function triggerFinish(runnerIdx, rank) {
   const h  = horses[runnerIdx];
   if (!h) return;
-  if (rank === 1) { breakFinishTape(); flashFinishLine(); }
-  showFinishLabel(runnerIdx, rank);
   const el = document.getElementById(`svgRunner-${runnerIdx}`);
   if (!el) return;
-  // Start from wherever the runner currently is so there's no jump at the line
   const m = (el.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
-  const startPos = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(99, runnerIdx);
-  const endPos   = lanePos(OVERSHOOT, runnerIdx);
+  const startPos  = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(99, runnerIdx);
+  const endPos    = lanePos(OVERSHOOT, runnerIdx);
+  const finishX   = lanePos(100, runnerIdx).x; // ≈ 290 for all lanes
   const t0  = performance.now();
-  const dur = rank === 1 ? 700 : 500;
+  const dur = rank === 1 ? 800 : 550;
+  let   crossed = false;
   (function step(now) {
     const t     = Math.min((now - t0) / dur, 1);
     const eased = 1 - Math.pow(1 - t, 3);
     const x = startPos.x + (endPos.x - startPos.x) * eased;
     const y = startPos.y + (endPos.y - startPos.y) * eased;
     el.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+    // Fire all finish effects exactly when the runner crosses the goal line
+    if (!crossed && x >= finishX) {
+      crossed = true;
+      if (rank === 1) { breakFinishTape(); flashFinishLine(); zoomOut(); }
+      showFinishLabel(runnerIdx, rank);
+    }
     if (t < 1) requestAnimationFrame(step);
     else addFinishPulse(x, y, h.color);
   })(t0);
