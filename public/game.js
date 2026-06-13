@@ -218,7 +218,6 @@ function onHorseFinished(horse, rank) {
   if (finishedSet.has(horse)) return;
   finishedSet.add(horse);
   if (rank === 1) { breakFinishTape(); flashFinishLine(); zoomOut(); }
-  if (rank <= 2) showWinnerBanner(horse, rank);
   showFinishLabel(horse, rank);
   triggerFinish(horse, rank);
 }
