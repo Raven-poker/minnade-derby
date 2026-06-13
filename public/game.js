@@ -232,7 +232,25 @@ function triggerFinish(runnerIdx, rank) {
       showFinishLabel(runnerIdx, rank);
     }
     if (t < 1) requestAnimationFrame(step);
-    else addFinishPulse(x, y, h.color);
+    else { addFinishPulse(x, y, h.color); coastAfterFinish(runnerIdx); }
+  })(t0);
+}
+
+function coastAfterFinish(runnerIdx) {
+  const el = document.getElementById(`svgRunner-${runnerIdx}`);
+  if (!el) return;
+  const m = (el.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
+  const startPos = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(OVERSHOOT, runnerIdx);
+  const endPos   = lanePos(OVERSHOOT + 10, runnerIdx); // coast 10% further along track
+  const t0 = performance.now();
+  const dur = 2000;
+  (function step(now) {
+    const t     = Math.min((now - t0) / dur, 1);
+    const eased = 1 - Math.pow(1 - t, 3); // cubic ease-out: starts fast, slows to stop
+    const x = startPos.x + (endPos.x - startPos.x) * eased;
+    const y = startPos.y + (endPos.y - startPos.y) * eased;
+    el.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+    if (t < 1) requestAnimationFrame(step);
   })(t0);
 }
 
