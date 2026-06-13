@@ -204,6 +204,29 @@ header h1 { font-size: 1.3rem; color: #ffd700; text-shadow: 0 0 10px #ffd70055; 
 #resultLeaderboard { font-size: 0.8rem; color: #8090b0; margin-bottom: 12px; line-height: 1.7; }
 #nextRaceTimer { font-size: 0.82rem; color: #5060a0; }
 
+/* ===== WINNER BANNER ===== */
+.winner-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%) scale(0.5);
+  opacity: 0;
+  background: rgba(8,8,20,0.94);
+  border: 3px solid;
+  border-radius: 16px;
+  padding: 14px 36px;
+  text-align: center;
+  z-index: 300;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+}
+.winner-banner.rank-1 { top: 28%; }
+.winner-banner.rank-2 { top: 52%; }
+.winner-banner.show   { transform: translateX(-50%) scale(1); opacity: 1; }
+.winner-banner.hide   { transform: translateX(-50%) scale(0.85); opacity: 0; transition: all 0.5s ease; }
+.wb-rank { font-size: 1.5rem; font-weight: bold; color: #fff; }
+.wb-name { font-size: 1.2rem; font-weight: bold; margin-top: 4px; }
+
 /* ===== TOAST ===== */
 #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(60px); background: #2d1b69; border: 1px solid #4a3f8a; border-radius: 8px; padding: 9px 18px; font-size: 0.88rem; color: #e0e6f0; transition: transform 0.3s ease; pointer-events: none; white-space: nowrap; z-index: 200; }
 #toast.show { transform: translateX(-50%) translateY(0); }

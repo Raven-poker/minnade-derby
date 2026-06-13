@@ -204,10 +204,26 @@ function updateProgress(progress) {
 function onHorseFinished(horse, rank) {
   if (finishedSet.has(horse)) return;
   finishedSet.add(horse);
-  // Fire effects at the 760m tape position (judgment moment)
   if (rank === 1) { breakFinishTape(); flashFinishLine(); zoomOut(); }
+  if (rank <= 2) showWinnerBanner(horse, rank);
   showFinishLabel(horse, rank);
   triggerFinish(horse, rank);
+}
+
+function showWinnerBanner(horse, rank) {
+  const h = horses[horse];
+  if (!h) return;
+  const banner = document.createElement('div');
+  banner.className = `winner-banner rank-${rank}`;
+  banner.style.borderColor = h.color;
+  banner.innerHTML = `
+    <div class="wb-rank">${rank === 1 ? '🥇 1着！' : '🥈 2着！'}</div>
+    <div class="wb-name" style="color:${h.color}">${h.name}</div>`;
+  document.body.appendChild(banner);
+  requestAnimationFrame(() => requestAnimationFrame(() => banner.classList.add('show')));
+  const stay = rank === 1 ? 3000 : 2500;
+  setTimeout(() => { banner.classList.remove('show'); banner.classList.add('hide'); }, stay);
+  setTimeout(() => banner.remove(), stay + 600);
 }
 
 function triggerFinish(runnerIdx, rank) {
