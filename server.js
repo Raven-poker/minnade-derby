@@ -10,19 +10,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Regular runners pool — 6 chosen randomly per race
 const RUNNER_TEMPLATES = [
-  { name: 'ブラックサンダー',     color: '#5566ff' },
-  { name: 'ゴールデンウィンド',   color: '#f4a261' },
-  { name: 'サクラストーム',       color: '#e63946' },
-  { name: 'シルバーアロー',       color: '#88ccdd' },
-  { name: 'ムーンライト',         color: '#aa77ee' },
-  { name: 'ターボチャージ',       color: '#2ec4b6' },
+  { name: 'ダニエルレイブン',     color: '#ff6348' },
+  { name: 'ファビエルナカター',   color: '#1e90ff' },
   { name: 'ハカタノシオー',       color: '#ff4757' },
   { name: 'イガラシロングアゴー', color: '#2ed573' },
   { name: 'ミヤザキビックバット', color: '#ffa502' },
   { name: 'シャラップコバヤシ',   color: '#a29bfe' },
   { name: 'カネシゲロフトキッス', color: '#fd79a8' },
-  { name: 'レイブンタイマグミ',   color: '#55efc4' },
   { name: 'ヨシダアパホテル',     color: '#fdcb6e' },
+  { name: 'サイトウギンギンオー', color: '#ffd32a' },
+  { name: 'アンパンチトミザワ',   color: '#7bed9f' },
 ];
 
 // Special strong runners — each has ~1/3 chance per race

@@ -21,6 +21,46 @@ let countdown = null;
 let finishedSet = new Set();
 const OVERSHOOT = 107;
 
+// Finish-line zoom
+const VB_NORMAL = { x: 0,  y: 0, w: 580, h: 290 };
+const VB_ZOOM   = { x: 30, y: 0, w: 320, h: 155 };
+let zoomState = 'out'; // 'out' | 'in'
+let zoomRaf   = null;
+
+function animateViewBox(from, to, dur, cb) {
+  const svg = document.getElementById('trackSVG');
+  if (zoomRaf) cancelAnimationFrame(zoomRaf);
+  const t0 = performance.now();
+  (function step(now) {
+    const t = Math.min((now - t0) / dur, 1);
+    const e = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    svg.setAttribute('viewBox',
+      `${(from.x+(to.x-from.x)*e).toFixed(1)} ${(from.y+(to.y-from.y)*e).toFixed(1)} ` +
+      `${(from.w+(to.w-from.w)*e).toFixed(1)} ${(from.h+(to.h-from.h)*e).toFixed(1)}`);
+    if (t < 1) zoomRaf = requestAnimationFrame(step);
+    else { zoomRaf = null; if (cb) cb(); }
+  })(t0);
+}
+
+function zoomIn() {
+  if (zoomState !== 'out') return;
+  zoomState = 'in';
+  animateViewBox(VB_NORMAL, VB_ZOOM, 900, null);
+}
+
+function zoomOut() {
+  if (zoomState !== 'in') return;
+  zoomState = 'out';
+  setTimeout(() => animateViewBox(VB_ZOOM, VB_NORMAL, 700, null), 1200);
+}
+
+function resetZoom() {
+  zoomState = 'out';
+  if (zoomRaf) { cancelAnimationFrame(zoomRaf); zoomRaf = null; }
+  const svg = document.getElementById('trackSVG');
+  if (svg) svg.setAttribute('viewBox', `${VB_NORMAL.x} ${VB_NORMAL.y} ${VB_NORMAL.w} ${VB_NORMAL.h}`);
+}
+
 function connect() {
   ws = new WebSocket(WS_URL);
   ws.onmessage = (e) => handle(JSON.parse(e.data));
@@ -77,6 +117,7 @@ function applyState(state) {
   horses   = state.horses || [];
   betState = state.myBets || { tansho: {}, nirenfuku: {} };
   finishedSet = new Set();
+  resetZoom();
 
   if (state.myMedals != null)    { myMedals = state.myMedals; setMedals(myMedals); }
   if (state.playerCount != null) document.getElementById('playerCount').textContent = `👥 ${state.playerCount}人`;
@@ -155,11 +196,15 @@ function updateProgress(progress) {
     const pos = lanePos(Math.min(pct, 99), i);
     el.setAttribute('transform', `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})`);
   });
+  // Zoom in when the leader approaches the finish line
+  const leader = Math.max(...progress);
+  if (leader >= 82 && zoomState === 'out') zoomIn();
 }
 
 function onHorseFinished(horse, rank) {
   if (finishedSet.has(horse)) return;
   finishedSet.add(horse);
+  if (rank === 1) zoomOut();
   triggerFinish(horse, rank);
 }
 
