@@ -215,7 +215,7 @@ function triggerFinish(runnerIdx, rank) {
   const m = (el.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
   const startPos  = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(99, runnerIdx);
   const endPos    = lanePos(OVERSHOOT, runnerIdx);
-  const finishX   = lanePos(100, runnerIdx).x; // ≈ 290 for all lanes
+  const finishX   = 280; // slightly before goal line — aligns tape with judgment timing
   const t0  = performance.now();
   const dur = rank === 1 ? 800 : 550;
   let   crossed = false;
