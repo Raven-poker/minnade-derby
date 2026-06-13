@@ -23,6 +23,8 @@ const RUNNER_TEMPLATES = [
   { name: 'ヨシダアパホテル',     color: '#fdcb6e', type: 'senkou' },
   { name: 'サイトウギンギンオー', color: '#ffd32a', type: 'normal' },
   { name: 'アンパンチトミザワ',   color: '#7bed9f', type: 'sashi'  },
+  { name: 'ケンバンハーモニカ',   color: '#00cec9', type: 'senkou' },
+  { name: 'ハーマイオニーブリンカ', color: '#e17055', type: 'sashi'  },
 ];
 
 // Special strong runners — each has ~1/3 chance per race
@@ -296,18 +298,17 @@ function startRace(roomId) {
     tick++;
     const newFinishers = [];
 
+    // Pass 1: update all progress values
     room.horses.forEach((h, i) => {
       if (room.raceProgress[i] >= targetProgress) return;
       const t    = Math.min(tick / ft[i], 1.0);
       const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
       const ht   = h.horseType || 'normal';
 
-      // 先行型: brief early boost (bell-curve over first 20% of race)
-      const earlyBoost = (ht === 'senkou' && t < 0.20)
-        ? 0.04 * Math.sin((t / 0.20) * Math.PI)
+      const earlyBoost = ht === 'senkou'
+        ? Math.max(0, 0.06 * (1 - t * 2))
         : 0;
 
-      // まくり kick — 差し型 starts earlier (65%) and goes harder (max +8%)
       let kick = 0;
       if (makuriSet.has(i)) {
         kick = ht === 'sashi'
@@ -319,14 +320,19 @@ function startRace(roomId) {
       const natural = Math.max(maxShown[i] / targetProgress, ease + kick + earlyBoost + noise);
       maxShown[i]   = Math.min(targetProgress, Math.round(natural * targetProgress));
       room.raceProgress[i] = maxShown[i];
+    });
 
-      // Fire when runner reaches 90% of total distance — tape-break aligns with visual crossing
-      if (!finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.95)) {
-        finished.add(i);
-        finishRank++;
-        room.finishOrder.push(i);
-        newFinishers.push({ horse: i, rank: finishRank });
-      }
+    // Pass 2: collect horses that crossed 95% this tick, sort by ft[] to resolve
+    // same-tick ties correctly (lower ft = earlier finisher), then assign ranks
+    const crossed = room.horses
+      .map((_, i) => i)
+      .filter(i => !finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.95));
+    crossed.sort((a, b) => ft[a] - ft[b]);
+    crossed.forEach(i => {
+      finished.add(i);
+      finishRank++;
+      room.finishOrder.push(i);
+      newFinishers.push({ horse: i, rank: finishRank });
     });
 
     newFinishers.forEach(({ horse, rank }) =>
