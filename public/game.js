@@ -179,8 +179,8 @@ function initRunners() {
     const group = svgEl('g', { id: `svgRunner-${i}`, transform: `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})` });
     group.appendChild(svgEl('circle', { r: '15', fill: h.color, opacity: '0.22' }));
     group.appendChild(svgEl('circle', { r: '12', fill: h.color, stroke: 'white', 'stroke-width': '2', class: 'runner-circle' }));
-    const text = svgEl('text', { x: '0', y: '5', 'text-anchor': 'middle', 'font-size': '13', style: 'pointer-events:none' });
-    text.textContent = '🏇';
+    const text = svgEl('text', { x: '0', y: '4', 'text-anchor': 'middle', fill: 'white', 'font-size': '10', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events:none' });
+    text.textContent = i + 1;
     group.appendChild(text);
     g.appendChild(group);
   });
@@ -204,6 +204,9 @@ function updateProgress(progress) {
 function onHorseFinished(horse, rank) {
   if (finishedSet.has(horse)) return;
   finishedSet.add(horse);
+  // Fire effects at the 760m tape position (judgment moment)
+  if (rank === 1) { breakFinishTape(); flashFinishLine(); zoomOut(); }
+  showFinishLabel(horse, rank);
   triggerFinish(horse, rank);
 }
 
@@ -213,24 +216,16 @@ function triggerFinish(runnerIdx, rank) {
   const el = document.getElementById(`svgRunner-${runnerIdx}`);
   if (!el) return;
   const m = (el.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
-  const startPos  = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(99, runnerIdx);
-  const endPos    = lanePos(OVERSHOOT, runnerIdx);
-  const finishX   = 280; // slightly before goal line — aligns tape with judgment timing
+  const startPos = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(99, runnerIdx);
+  const endPos   = lanePos(OVERSHOOT, runnerIdx);
   const t0  = performance.now();
   const dur = rank === 1 ? 800 : 550;
-  let   crossed = false;
   (function step(now) {
     const t     = Math.min((now - t0) / dur, 1);
     const eased = 1 - Math.pow(1 - t, 3);
     const x = startPos.x + (endPos.x - startPos.x) * eased;
     const y = startPos.y + (endPos.y - startPos.y) * eased;
     el.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
-    // Fire all finish effects exactly when the runner crosses the goal line
-    if (!crossed && x >= finishX) {
-      crossed = true;
-      if (rank === 1) { breakFinishTape(); flashFinishLine(); zoomOut(); }
-      showFinishLabel(runnerIdx, rank);
-    }
     if (t < 1) requestAnimationFrame(step);
     else { addFinishPulse(x, y, h.color); coastAfterFinish(runnerIdx); }
   })(t0);
