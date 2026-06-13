@@ -151,9 +151,17 @@ header h1 { font-size: 1.3rem; color: #ffd700; text-shadow: 0 0 10px #ffd70055; 
 .horse-pick-btn .pick-num { font-weight: bold; font-size: 0.88rem; display: block; }
 .horse-pick-btn .pick-amount { display: block; font-size: 0.6rem; color: #ffd700; }
 
-.nirentan-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-.nirentan-selects label { display: block; font-size: 0.74rem; color: #7080a0; margin-bottom: 4px; }
-.nirentan-selects select { width: 100%; background: #1a2040; border: 1px solid #4a3f8a; border-radius: 7px; color: #e0e6f0; padding: 6px 8px; font-size: 0.8rem; }
+.nirenfuku-selects { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.nirenfuku-selects label { display: block; font-size: 0.74rem; color: #7080a0; margin-bottom: 4px; }
+.nirenfuku-selects select { width: 100%; background: #1a2040; border: 1px solid #4a3f8a; border-radius: 7px; color: #e0e6f0; padding: 6px 8px; font-size: 0.8rem; }
+
+/* ===== HISTORY BADGES ===== */
+.hist-row { display: flex; gap: 3px; margin-top: 4px; }
+.hist-badge { display: inline-flex; align-items: center; justify-content: center; padding: 1px 5px; border-radius: 4px; font-size: 0.62rem; font-weight: 700; white-space: nowrap; }
+.hist-1    { background: #2a2000; color: #ffd700; border: 1px solid #6a5000; }
+.hist-2    { background: #1e2630; color: #a0b8c8; border: 1px solid #3a4860; }
+.hist-3    { background: #1a1f2e; color: #4a5568; border: 1px solid #2a3040; }
+.hist-null { background: #141828; color: #333a4a; border: 1px solid #1e2438; }
 .odds-preview { font-size: 0.8rem; color: #a0c0f0; margin-bottom: 8px; min-height: 16px; }
 
 .bet-amount-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }

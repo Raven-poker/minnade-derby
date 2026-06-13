@@ -2,12 +2,10 @@ const WS_URL = location.protocol === 'https:' ? `wss://${location.host}` : `ws:/
 
 // Track geometry — must match SVG viewBox values in index.html
 const CX = 290, CY = 145;
-const INNER_RX = 178, INNER_RY = 50;
-const OUTER_RX = 270, OUTER_RY = 136;
-// 6 lane centres (rx, ry), innermost first
 const LANE_RX = [185, 201, 216, 232, 247, 263];
 const LANE_RY = [ 58,  73,  89, 104, 120, 136];
 
+// Progress > 100 allowed so runners can overshoot the finish line
 function lanePos(progress, lane) {
   const angle = -Math.PI / 2 + (progress / 100) * 2 * Math.PI;
   return {
@@ -18,7 +16,7 @@ function lanePos(progress, lane) {
 
 let ws, clientId = null, myName = '', myColor = '#888';
 let horses = [], phase = 'waiting', myMedals = 0;
-let betState = { tansho: {}, nirentan: {} };
+let betState  = { tansho: {}, nirenfuku: {} };
 let countdown = null;
 let finishedSet = new Set();
 const OVERSHOOT = 107;
@@ -52,8 +50,8 @@ function handle(msg) {
     case 'result':      showResult(msg); break;
 
     case 'betConfirm':
-      betState = msg.bet;
-      myMedals = msg.myMedals;
+      betState  = msg.bet;
+      myMedals  = msg.myMedals;
       setMedals(myMedals);
       renderTanshoButtons();
       renderMyBets();
@@ -76,20 +74,20 @@ function handle(msg) {
 function applyState(state) {
   phase    = state.phase;
   horses   = state.horses || [];
-  betState = state.myBets || { tansho: {}, nirentan: {} };
+  betState = state.myBets || { tansho: {}, nirenfuku: {} };
+  finishedSet = new Set();
 
   if (state.myMedals != null)    { myMedals = state.myMedals; setMedals(myMedals); }
   if (state.playerCount != null) document.getElementById('playerCount').textContent = `👥 ${state.playerCount}人`;
   if (state.leaderboard)         renderLeaderboard(state.leaderboard);
 
-  finishedSet = new Set();
   initRunners();
   renderRunnerInfoRows();
   renderTanshoButtons();
-  renderNirentanSelects();
+  renderNirenfukuSelects();
   renderMyBets();
   updatePhaseUI();
-  document.getElementById('nirentanOddsPreview').textContent = '';
+  document.getElementById('nirenfukuOddsPreview').textContent = '';
   document.getElementById('resultOverlay').classList.add('hidden');
   clearRankBadges();
 
@@ -99,11 +97,11 @@ function applyState(state) {
 }
 
 function updatePhaseUI() {
-  const label  = document.getElementById('phaseLabel');
-  const timer  = document.getElementById('timerDisplay');
-  const svg    = document.getElementById('trackSVG');
+  const label = document.getElementById('phaseLabel');
+  const timer = document.getElementById('timerDisplay');
+  const svg   = document.getElementById('trackSVG');
   svg.classList.toggle('racing', phase === 'racing');
-  document.getElementById('nirentanBtn').disabled = phase !== 'betting';
+  document.getElementById('nirenfukuBtn').disabled = phase !== 'betting';
 
   if      (phase === 'betting') { label.textContent = '🎰 ベット受付中！'; timer.classList.remove('hidden'); }
   else if (phase === 'racing')  { label.textContent = '🏃 レース中！';      timer.classList.add('hidden'); }
@@ -121,7 +119,6 @@ function setMedals(n) { document.getElementById('myMedals').textContent = n.toLo
 
 // ===== SVG Track =====
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
 function svgEl(tag, attrs) {
   const el = document.createElementNS(SVG_NS, tag);
   Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
@@ -132,24 +129,19 @@ function initRunners() {
   const g = document.getElementById('runnersGroup');
   g.innerHTML = '';
   horses.forEach((h, i) => {
-    const pos = lanePos(0, i);
+    const pos   = lanePos(0, i);
     const group = svgEl('g', { id: `svgRunner-${i}`, transform: `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})` });
-
-    // Shadow/glow
-    const shadow = svgEl('circle', { r: '14', fill: h.color, opacity: '0.25' });
-    // Main circle
+    group.appendChild(svgEl('circle', { r: '14', fill: h.color, opacity: '0.25' }));
     const circle = svgEl('circle', { r: '11', fill: h.color, stroke: 'white', 'stroke-width': '2', class: 'runner-circle' });
-    // Number label
-    const text = svgEl('text', { x: '0', y: '4', 'text-anchor': 'middle', fill: 'white', 'font-size': '10', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events:none' });
+    const text   = svgEl('text', { x: '0', y: '4', 'text-anchor': 'middle', fill: 'white', 'font-size': '10', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events:none' });
     text.textContent = i + 1;
-
-    group.appendChild(shadow);
     group.appendChild(circle);
     group.appendChild(text);
     g.appendChild(group);
   });
 }
 
+// ===== Race animation =====
 function updateProgress(progress) {
   progress.forEach((pct, i) => {
     if (finishedSet.has(i)) return;
@@ -166,38 +158,35 @@ function updateProgress(progress) {
 }
 
 function triggerFinish(runnerIdx, rank) {
-  const h = horses[runnerIdx];
+  const h  = horses[runnerIdx];
   if (!h) return;
   if (rank === 1) flashFinishLine();
-
   const el = document.getElementById(`svgRunner-${runnerIdx}`);
   if (!el) return;
-
-  const t0 = performance.now();
-  const dur = 480;
-
+  // Start from wherever the runner currently is so there's no jump at the line
+  const m = (el.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
+  const startPos = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(100, runnerIdx);
+  const endPos   = lanePos(OVERSHOOT, runnerIdx);
+  const t0  = performance.now();
+  const dur = 600;
   (function step(now) {
-    const t = Math.min((now - t0) / dur, 1);
+    const t     = Math.min((now - t0) / dur, 1);
     const eased = 1 - Math.pow(1 - t, 3);
-    const prog = 100 + (OVERSHOOT - 100) * eased;
-    const pos = lanePos(prog, runnerIdx);
-    el.setAttribute('transform', `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})`);
-    if (t < 1) {
-      requestAnimationFrame(step);
-    } else {
-      addFinishPulse(pos.x, pos.y, h.color);
-    }
+    const x = startPos.x + (endPos.x - startPos.x) * eased;
+    const y = startPos.y + (endPos.y - startPos.y) * eased;
+    el.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
+    if (t < 1) requestAnimationFrame(step);
+    else addFinishPulse(x, y, h.color);
   })(t0);
 }
 
 function flashFinishLine() {
-  const svg = document.getElementById('trackSVG');
+  const svg   = document.getElementById('trackSVG');
   const flash = svgEl('rect', { x: '284', y: '9', width: '12', height: '130', rx: '3', fill: 'gold', opacity: '0' });
   svg.insertBefore(flash, document.getElementById('runnersGroup'));
-
   const t0 = performance.now();
   (function anim(now) {
-    const t = Math.min((now - t0) / 700, 1);
+    const t  = Math.min((now - t0) / 700, 1);
     const op = t < 0.15 ? t / 0.15 : (1 - t) / 0.85;
     flash.setAttribute('opacity', (op * 0.85).toFixed(2));
     if (t < 1) requestAnimationFrame(anim);
@@ -206,10 +195,9 @@ function flashFinishLine() {
 }
 
 function addFinishPulse(x, y, color) {
-  const svg = document.getElementById('trackSVG');
+  const svg  = document.getElementById('trackSVG');
   const ring = svgEl('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: '12', fill: 'none', stroke: color, 'stroke-width': '3', opacity: '1' });
   svg.appendChild(ring);
-
   const t0 = performance.now();
   (function anim(now) {
     const t = Math.min((now - t0) / 600, 1);
@@ -228,17 +216,14 @@ function clearRankBadges() {
 function showRankBadges(first, second) {
   const group = document.getElementById('rankBadgesGroup');
   group.innerHTML = '';
-
   [first, second].forEach((idx, rank) => {
     const pos = lanePos(OVERSHOOT, idx);
-    const g = svgEl('g', { transform: `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})` });
-    const label = rank === 0 ? '🥇' : '🥈';
-    const bg = svgEl('rect', { x: '-14', y: '-11', width: '28', height: '15', rx: '5', fill: rank === 0 ? '#b8860b' : '#666', opacity: '0.9' });
-    const text = svgEl('text', { x: '0', y: '1', 'text-anchor': 'middle', fill: 'white', 'font-size': '10', 'font-weight': 'bold', 'font-family': 'sans-serif', class: 'svg-rank-badge' });
-    text.textContent = rank === 0 ? '1着' : '2着';
-    g.appendChild(bg); g.appendChild(text);
+    const g   = svgEl('g', { transform: `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})` });
+    const bg  = svgEl('rect', { x: '-14', y: '-11', width: '28', height: '15', rx: '5', fill: rank === 0 ? '#b8860b' : '#666', opacity: '0.9' });
+    const txt = svgEl('text', { x: '0', y: '1', 'text-anchor': 'middle', fill: 'white', 'font-size': '10', 'font-weight': 'bold', 'font-family': 'sans-serif', class: 'svg-rank-badge' });
+    txt.textContent = rank === 0 ? '1着' : '2着';
+    g.appendChild(bg); g.appendChild(txt);
     group.appendChild(g);
-    // Highlight info row
     const row = document.getElementById(`info-row-${idx}`);
     if (row) row.classList.add(rank === 0 ? 'is-winner' : 'is-second');
   });
@@ -247,10 +232,20 @@ function showRankBadges(first, second) {
 // ===== Runner Info Panel =====
 function condClass(c) { return c === '良' ? 'cond-good' : c === '悪' ? 'cond-bad' : 'cond-norm'; }
 
+function histBadgeHtml(pos) {
+  if (pos === 1)    return '<span class="hist-badge hist-1">1着</span>';
+  if (pos === 2)    return '<span class="hist-badge hist-2">2着</span>';
+  if (pos === 3)    return '<span class="hist-badge hist-3">3↓</span>';
+  return '<span class="hist-badge hist-null">－</span>';
+}
+
 function renderRunnerInfoRows() {
   const container = document.getElementById('runnerInfoRows');
   container.innerHTML = '';
   horses.forEach((h, i) => {
+    const histRow = Array.isArray(h.history) && h.history.length
+      ? `<div class="hist-row">${h.history.map(histBadgeHtml).join('')}</div>`
+      : '';
     const row = document.createElement('div');
     row.className = 'runner-info-row';
     row.id = `info-row-${i}`;
@@ -263,6 +258,7 @@ function renderRunnerInfoRows() {
           <span class="cond-badge ${condClass(h.health)}">${h.health}</span>
           <span class="runner-odds">${h.tanshoOdds}倍</span>
         </div>
+        ${histRow}
       </div>
       <div class="runner-betters" id="betters-${i}"></div>`;
     container.appendChild(row);
@@ -274,9 +270,8 @@ function renderBetDetails(details) {
     const el = document.getElementById(`betters-${i}`);
     if (!el || !details[i]) return;
     el.innerHTML = details[i].map(p => {
-      const initial = p.name.slice(0, 1);
       const isMe = p.name === myName;
-      return `<div class="player-chip${isMe ? ' is-me' : ''}" style="background:${p.color}" title="${p.name}">${initial}</div>`;
+      return `<div class="player-chip${isMe ? ' is-me' : ''}" style="background:${p.color}" title="${p.name}">${p.name.slice(0,1)}</div>`;
     }).join('');
   });
 }
@@ -286,8 +281,8 @@ function renderTanshoButtons() {
   const c = document.getElementById('tanshoSelect');
   c.innerHTML = '';
   horses.forEach((h, i) => {
-    const isBet = betState.tansho[i] !== undefined;
-    const btn = document.createElement('button');
+    const isBet  = betState.tansho[i] !== undefined;
+    const btn    = document.createElement('button');
     btn.className = 'horse-pick-btn' + (isBet ? ' selected' : '');
     btn.style.borderColor = h.color + '99';
     const amount = betState.tansho[i];
@@ -297,10 +292,10 @@ function renderTanshoButtons() {
   });
 }
 
-function renderNirentanSelects() {
-  ['nirentanFirst', 'nirentanSecond'].forEach((id, idx) => {
+function renderNirenfukuSelects() {
+  ['nirenfukuA', 'nirenfukuB'].forEach((id, idx) => {
     const sel = document.getElementById(id);
-    sel.innerHTML = `<option value="">${idx === 0 ? '1着を選択' : '2着を選択'}</option>`;
+    sel.innerHTML = `<option value="">${idx === 0 ? '馬Aを選択' : '馬Bを選択'}</option>`;
     horses.forEach((h, i) => { sel.innerHTML += `<option value="${i}">${i + 1}. ${h.name}</option>`; });
   });
 }
@@ -308,8 +303,8 @@ function renderNirentanSelects() {
 function renderMyBets() {
   const el      = document.getElementById('myBetsList');
   const totalEl = document.getElementById('totalBetDisplay');
-  const items = [];
-  let total = 0;
+  const items   = [];
+  let total     = 0;
   const canRemove = phase === 'betting';
 
   Object.entries(betState.tansho || {}).forEach(([horse, amount]) => {
@@ -323,14 +318,14 @@ function renderMyBets() {
     </div>`);
   });
 
-  Object.values(betState.nirentan || {}).forEach(({ first, second, amount }) => {
-    const h1 = horses[first], h2 = horses[second];
+  Object.values(betState.nirenfuku || {}).forEach(({ horse1, horse2, amount }) => {
+    const h1 = horses[horse1], h2 = horses[horse2];
     if (!h1 || !h2) return;
     total += amount;
     items.push(`<div class="bet-list-item">
-      <span class="bet-list-label">2連単 <strong>${first+1}.${h1.name.slice(0,4)}→${second+1}.${h2.name.slice(0,4)}</strong></span>
+      <span class="bet-list-label">2連複 <strong>${horse1+1}.${h1.name.slice(0,4)}＋${horse2+1}.${h2.name.slice(0,4)}</strong></span>
       <span class="bet-list-amount">${amount}枚</span>
-      ${canRemove ? `<button class="bet-remove-btn" onclick="removeNirentan(${first},${second})">×</button>` : ''}
+      ${canRemove ? `<button class="bet-remove-btn" onclick="removeNirenfuku(${horse1},${horse2})">×</button>` : ''}
     </div>`);
   });
 
@@ -350,22 +345,23 @@ function onTanshoClick(i) {
   }
 }
 
-function removeTansho(horse)            { send({ type: 'bet', betType: 'removeTansho', horse: parseInt(horse) }); }
-function removeNirentan(first, second)  { send({ type: 'bet', betType: 'removeNirentan', first, second }); }
+function removeTansho(horse)           { send({ type: 'bet', betType: 'removeTansho', horse: parseInt(horse) }); }
+function removeNirenfuku(horse1, horse2) { send({ type: 'bet', betType: 'removeNirenfuku', horse1, horse2 }); }
 
-function updateNirentanPreview() {
-  const f = parseInt(document.getElementById('nirentanFirst').value);
-  const s = parseInt(document.getElementById('nirentanSecond').value);
-  const el = document.getElementById('nirentanOddsPreview');
-  if (!isNaN(f) && !isNaN(s) && f !== s && horses[f] && horses[s]) {
-    const odds = Math.max(1.5, Math.round((1/horses[f].winProb)*(1/horses[s].winProb)*0.60*10)/10);
+function updateNirenfukuPreview() {
+  const a  = parseInt(document.getElementById('nirenfukuA').value);
+  const b  = parseInt(document.getElementById('nirenfukuB').value);
+  const el = document.getElementById('nirenfukuOddsPreview');
+  if (!isNaN(a) && !isNaN(b) && a !== b && horses[a] && horses[b]) {
+    const pa   = horses[a].winProb, pb = horses[b].winProb;
+    const odds = Math.max(1.5, Math.round((1/pa)*(1/pb)*0.40*10)/10);
     el.textContent = `予想オッズ: 約 ${odds}倍`;
   } else { el.textContent = ''; }
 }
 
 // ===== Result =====
 function showResult(msg) {
-  const { first, second, tanshoOdds, nirentanOdds, payouts, medals, leaderboard: lb } = msg;
+  const { first, second, tanshoOdds, nirenfukuOdds, payouts, medals, leaderboard: lb } = msg;
   showRankBadges(first, second);
 
   const h1 = horses[first], h2 = horses[second];
@@ -379,15 +375,15 @@ function showResult(msg) {
       <div class="result-place-name" style="color:${h2.color}">${second+1}. ${h2.name}</div>
     </div>`;
   document.getElementById('resultOdds').innerHTML =
-    `単勝: <strong>${tanshoOdds}倍</strong>　2連単: <strong>${nirentanOdds}倍</strong>`;
+    `単勝: <strong>${tanshoOdds}倍</strong>　2連複: <strong>${nirenfukuOdds}倍</strong>`;
 
   const payout   = payouts[clientId] || 0;
   const invested = Object.values(betState.tansho||{}).reduce((s,a)=>s+a,0)
-                 + Object.values(betState.nirentan||{}).reduce((s,b)=>s+b.amount,0);
+                 + Object.values(betState.nirenfuku||{}).reduce((s,b)=>s+b.amount,0);
   const payEl = document.getElementById('myPayout');
-  if (!invested)      { payEl.className = 'no-bet'; payEl.textContent = 'ベットなし'; }
-  else if (payout > 0){ payEl.className = 'win';    payEl.innerHTML = `🎉 的中！ <strong>${payout.toLocaleString()}枚</strong> 獲得（投資: ${invested}枚）`; }
-  else                { payEl.className = 'lose';   payEl.textContent = '💸 ハズレ...'; }
+  if (!invested)       { payEl.className = 'no-bet'; payEl.textContent = 'ベットなし'; }
+  else if (payout > 0) { payEl.className = 'win';    payEl.innerHTML = `🎉 的中！ <strong>${payout.toLocaleString()}枚</strong> 獲得（投資: ${invested}枚）`; }
+  else                 { payEl.className = 'lose';   payEl.textContent = '💸 ハズレ...'; }
 
   if (medals?.[clientId] != null) { myMedals = medals[clientId]; setMedals(myMedals); }
   if (lb) {
@@ -425,7 +421,6 @@ function showToast(msg) {
   el.textContent = msg; el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
 }
-
 function showLobbyError(msg) {
   const el = document.getElementById('lobbyError');
   el.textContent = msg; el.classList.remove('hidden');
@@ -477,18 +472,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.getElementById('nirentanBtn').onclick = () => {
+  document.getElementById('nirenfukuBtn').onclick = () => {
     if (phase !== 'betting') return;
-    const first  = parseInt(document.getElementById('nirentanFirst').value);
-    const second = parseInt(document.getElementById('nirentanSecond').value);
-    if (isNaN(first) || isNaN(second)) { showToast('1着・2着を選んでください'); return; }
-    if (first === second)               { showToast('1着と2着は別を選んでください'); return; }
-    const amount = Math.max(10, parseInt(document.getElementById('nirentanAmount').value) || 100);
-    send({ type: 'bet', betType: 'nirentan', first, second, amount });
+    const a = parseInt(document.getElementById('nirenfukuA').value);
+    const b = parseInt(document.getElementById('nirenfukuB').value);
+    if (isNaN(a) || isNaN(b)) { showToast('2頭選んでください'); return; }
+    if (a === b)               { showToast('別の馬を選んでください'); return; }
+    const amount = Math.max(10, parseInt(document.getElementById('nirenfukuAmount').value) || 100);
+    send({ type: 'bet', betType: 'nirenfuku', horse1: a, horse2: b, amount });
   };
 
-  document.getElementById('nirentanFirst').addEventListener('change',  updateNirentanPreview);
-  document.getElementById('nirentanSecond').addEventListener('change', updateNirentanPreview);
+  document.getElementById('nirenfukuA').addEventListener('change', updateNirenfukuPreview);
+  document.getElementById('nirenfukuB').addEventListener('change', updateNirenfukuPreview);
 
   document.getElementById('resultOverlay').addEventListener('click', e => {
     if (e.target === document.getElementById('resultOverlay'))
