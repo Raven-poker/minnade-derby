@@ -286,9 +286,10 @@ function startRace(roomId) {
     if (Math.random() < p) makuriSet.add(i);
   });
 
-  const maxShown  = room.horses.map(() => 0);
-  const finished  = new Set();
+  const maxShown   = room.horses.map(() => 0);
+  const finished   = new Set();
   let   finishRank = 0;
+  room.finishOrder = [];  // populated in order horses cross 95% mark
 
   let tick = 0;
   const iv = setInterval(() => {
@@ -323,6 +324,7 @@ function startRace(roomId) {
       if (!finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.95)) {
         finished.add(i);
         finishRank++;
+        room.finishOrder.push(i);
         newFinishers.push({ horse: i, rank: finishRank });
       }
     });
@@ -346,7 +348,9 @@ function showResult(roomId) {
   const room = rooms.get(roomId);
   if (!room) return;
   room.phase    = PHASE.RESULT;
-  const [first, second] = room.raceResult;
+  // Use actual crossing order (finishOrder) — falls back to pre-sim if race ended early
+  const first  = room.finishOrder[0] ?? room.raceResult[0];
+  const second = room.finishOrder[1] ?? room.raceResult[1];
   const nfOdds      = nirenfukuOdds(room, first, second);
   const nfKey       = `${Math.min(first, second)}-${Math.max(first, second)}`;
   const g1Mult      = room.isG1 ? 1.5 : 1.0;   // G1 pays 1.5× on all winnings
