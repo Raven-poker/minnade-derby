@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>みんなでダービー</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div id="lobbyCard">
+    <h1>🏇 みんなでダービー</h1>
+    <p class="lobby-sub">競馬メダルゲーム</p>
+    <div class="lobby-field">
+      <label>あなたの名前</label>
+      <input type="text" id="lobbyName" placeholder="名前を入力" maxlength="12">
+    </div>
+    <div class="lobby-divider">部屋を作成</div>
+    <div class="lobby-field">
+      <label>開始メダル枚数</label>
+      <div class="medal-presets">
+        <button class="preset-btn active" data-val="1000">1,000</button>
+        <button class="preset-btn" data-val="3000">3,000</button>
+        <button class="preset-btn" data-val="5000">5,000</button>
+        <button class="preset-btn" data-val="10000">10,000</button>
+      </div>
+      <input type="number" id="startMedals" value="1000" min="100" max="99999">
+    </div>
+    <button id="createBtn" class="lobby-btn primary">部屋を作成</button>
+    <div class="lobby-divider">部屋に参加</div>
+    <div class="lobby-field">
+      <label>部屋コード（4文字）</label>
+      <input type="text" id="joinCode" placeholder="例: A3F7" maxlength="4" style="text-transform:uppercase">
+    </div>
+    <button id="joinBtn" class="lobby-btn">参加する</button>
+    <div id="lobbyError" class="lobby-error hidden"></div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="gameArea" class="hidden">
+  <header>
+    <div class="header-left">
+      <h1>🏇 みんなでダービー</h1>
+      <span id="roomBadge"></span>
+    </div>
+    <div class="header-right">
+      <div class="medal-display">
+        <span id="myColorDot" class="my-color-dot"></span>
+        <span>🥇</span>
+        <span id="myMedals">-</span>
+        <span class="medal-unit">枚</span>
+      </div>
+      <span id="playerCount">👥 1人</span>
+      <div class="name-area">
+        <input type="text" id="nameInput" placeholder="名前" maxlength="12">
+        <button id="nameBtn">変更</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="phaseBar">
+    <div id="phaseLabel">待機中...</div>
+    <div id="timerDisplay" class="hidden"></div>
+  </div>
+
+  <div id="mainArea">
+    <div id="leftCol">
+
+      <!-- Oval Track -->
+      <div id="trackWrapper">
+        <svg id="trackSVG" viewBox="0 0 580 290" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="trackGrad" cx="50%" cy="50%" r="60%">
+              <stop offset="0%"   stop-color="#d8934a"/>
+              <stop offset="100%" stop-color="#a86020"/>
+            </radialGradient>
+            <radialGradient id="grassGrad" cx="50%" cy="50%" r="60%">
+              <stop offset="0%"   stop-color="#2e8020"/>
+              <stop offset="100%" stop-color="#1a5a0a"/>
+            </radialGradient>
+            <!-- Checkered finish pattern -->
+            <pattern id="checker" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+              <rect width="4" height="4" fill="white"/>
+              <rect x="4" y="4" width="4" height="4" fill="white"/>
+              <rect x="0" y="0" width="8" height="8" fill="none"/>
+            </pattern>
+            <!-- Glow filter for runners -->
+            <filter id="glow">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Track surface ring -->
+          <ellipse cx="290" cy="145" rx="270" ry="136" fill="url(#trackGrad)"/>
+
+          <!-- Center infield grass -->
+          <ellipse cx="290" cy="145" rx="178" ry="50" fill="url(#grassGrad)"/>
+
+          <!-- Lane dividers (5 lines = 6 lanes) -->
+          <!-- Lane width: (270-178)/6 = 15.3 per lane -->
+          <!-- Boundaries at rx: 178, 193, 209, 224, 239, 255, 270 -->
+          <ellipse cx="290" cy="145" rx="193" ry="65" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="6 4"/>
+          <ellipse cx="290" cy="145" rx="209" ry="81" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="6 4"/>
+          <ellipse cx="290" cy="145" rx="224" ry="97" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="6 4"/>
+          <ellipse cx="290" cy="145" rx="239" ry="112" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="6 4"/>
+          <ellipse cx="290" cy="145" rx="255" ry="128" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="6 4"/>
+
+          <!-- Outer & inner edges -->
+          <ellipse cx="290" cy="145" rx="270" ry="136" fill="none" stroke="white" stroke-width="2.5"/>
+          <ellipse cx="290" cy="145" rx="178" ry="50"  fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>
+
+          <!-- Finish / Start line (top of oval) -->
+          <rect x="286" y="9" width="8" height="86" fill="url(#checker)" opacity="0.95"/>
+
+          <!-- 🏁 flag label -->
+          <text x="302" y="32" fill="white" font-size="16" font-family="system-ui">🏁</text>
+          <text x="300" y="50" fill="rgba(255,255,255,0.7)" font-size="9" font-family="sans-serif" font-weight="bold">GOAL</text>
+
+          <!-- "RUNNING DIRECTION" arrow on infield -->
+          <text x="290" y="150" fill="rgba(255,255,255,0.35)" font-size="11" text-anchor="middle" font-family="sans-serif">↻ 時計回り</text>
+
+          <!-- Dynamic runners (added by JS) -->
+          <g id="runnersGroup"></g>
+
+          <!-- Rank badges at finish (added by JS) -->
+          <g id="rankBadgesGroup"></g>
+        </svg>
+      </div>
+
+      <!-- Runner info rows -->
+      <div id="runnerInfoPanel">
+        <div id="runnerInfoRows"></div>
+      </div>
+
+      <!-- Leaderboard -->
+      <div id="leaderboardBox">
+        <h4>🏅 メダルランキング</h4>
+        <div id="leaderboard"></div>
+      </div>
+    </div>
+
+    <!-- Bet Panel -->
+    <div id="betPanel">
+      <div class="bet-section">
+        <h3>🎯 単勝</h3>
+        <p class="bet-desc">1着を当てる（複数ベット可・クリックで追加/解除）</p>
+        <div class="bet-horse-select" id="tanshoSelect"></div>
+        <div class="bet-amount-row">
+          <label>枚数</label>
+          <div class="chip-buttons" data-target="tanshoAmount">
+            <button class="chip-btn" data-val="10">10</button>
+            <button class="chip-btn" data-val="50">50</button>
+            <button class="chip-btn" data-val="100">100</button>
+            <button class="chip-btn" data-val="500">500</button>
+          </div>
+          <input type="number" id="tanshoAmount" value="100" min="10">
+        </div>
+      </div>
+
+      <div class="bet-section">
+        <h3>🎯 2連単</h3>
+        <p class="bet-desc">1着・2着を順番通りに当てる</p>
+        <div class="nirentan-selects">
+          <div>
+            <label>1着</label>
+            <select id="nirentanFirst"><option value="">選択</option></select>
+          </div>
+          <div>
+            <label>2着</label>
+            <select id="nirentanSecond"><option value="">選択</option></select>
+          </div>
+        </div>
+        <div id="nirentanOddsPreview" class="odds-preview"></div>
+        <div class="bet-amount-row">
+          <label>枚数</label>
+          <div class="chip-buttons" data-target="nirentanAmount">
+            <button class="chip-btn" data-val="10">10</button>
+            <button class="chip-btn" data-val="50">50</button>
+            <button class="chip-btn" data-val="100">100</button>
+            <button class="chip-btn" data-val="500">500</button>
+          </div>
+          <input type="number" id="nirentanAmount" value="100" min="10">
+        </div>
+        <button id="nirentanBtn" class="bet-btn" disabled>2連単を追加</button>
+      </div>
+
+      <div class="bet-section">
+        <h3>📋 マイベット</h3>
+        <div id="myBetsList"><p class="no-bets-msg">ベットなし</p></div>
+        <div id="totalBetDisplay" class="hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result Overlay -->
+  <div id="resultOverlay" class="hidden">
+    <div id="resultCard">
+      <h2>🏆 レース結果</h2>
+      <div id="resultHorses"></div>
+      <div id="resultOdds"></div>
+      <div id="myPayout"></div>
+      <div id="resultLeaderboard"></div>
+      <div id="nextRaceTimer"></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
