@@ -250,10 +250,15 @@ function startRace(roomId) {
 
   // maxShown[i] = highest progress ever shown — guarantees no backward movement
   const maxShown = room.horses.map(() => 0);
+  // finished tracks exact finish order based on ft[] — deterministic, matches raceResult
+  const finished = new Set();
+  let finishRank = 0;
 
   let tick = 0;
   const iv = setInterval(() => {
     tick++;
+    const newFinishers = [];
+
     room.horses.forEach((_, i) => {
       if (room.raceProgress[i] >= 100) return;
       const t    = Math.min(tick / ft[i], 1.0);
@@ -266,12 +271,22 @@ function startRace(roomId) {
         : 0;
 
       const noise   = (Math.random() - 0.5) * 0.012;
-      // No 99% cap — let the curve reach 100 naturally so runners don't stall at the line
       const natural = Math.max(maxShown[i] / 100, ease + kick + noise);
       maxShown[i]   = Math.min(100, Math.round(natural * 100));
-
       room.raceProgress[i] = maxShown[i];
+
+      // Emit finish event the first tick this horse's scheduled time is reached
+      if (!finished.has(i) && tick >= ft[i]) {
+        finished.add(i);
+        finishRank++;
+        newFinishers.push({ horse: i, rank: finishRank });
+      }
     });
+
+    // Broadcast finish events BEFORE raceProgress so clients get rank before pct=100
+    newFinishers.forEach(({ horse, rank }) =>
+      broadcast(roomId, { type: 'horseFinished', horse, rank })
+    );
     broadcast(roomId, { type: 'raceProgress', progress: room.raceProgress });
     if (tick >= maxTicks) { clearInterval(iv); showResult(roomId); }
   }, 200);

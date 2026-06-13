@@ -46,6 +46,7 @@ function handle(msg) {
 
     case 'stateUpdate': applyState(msg.state); break;
     case 'timer':       updateTimer(msg.timer); break;
+    case 'horseFinished': onHorseFinished(msg.horse, msg.rank); break;
     case 'raceProgress': updateProgress(msg.progress); break;
     case 'result':      showResult(msg); break;
 
@@ -107,6 +108,10 @@ function updatePhaseUI() {
   else if (phase === 'racing')  { label.textContent = '🏃 レース中！';      timer.classList.add('hidden'); }
   else if (phase === 'result')  { label.textContent = '🏆 結果発表';        timer.classList.add('hidden'); }
   else                          { label.textContent = '⏳ 待機中...';       timer.classList.add('hidden'); }
+
+  // Show finish tape only during racing
+  const tape = document.getElementById('finishTape');
+  if (tape) tape.setAttribute('opacity', phase === 'racing' ? '0.9' : '0');
 }
 
 function updateTimer(t) {
@@ -131,11 +136,10 @@ function initRunners() {
   horses.forEach((h, i) => {
     const pos   = lanePos(0, i);
     const group = svgEl('g', { id: `svgRunner-${i}`, transform: `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})` });
-    group.appendChild(svgEl('circle', { r: '14', fill: h.color, opacity: '0.25' }));
-    const circle = svgEl('circle', { r: '11', fill: h.color, stroke: 'white', 'stroke-width': '2', class: 'runner-circle' });
-    const text   = svgEl('text', { x: '0', y: '4', 'text-anchor': 'middle', fill: 'white', 'font-size': '10', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events:none' });
-    text.textContent = i + 1;
-    group.appendChild(circle);
+    group.appendChild(svgEl('circle', { r: '15', fill: h.color, opacity: '0.22' }));
+    group.appendChild(svgEl('circle', { r: '12', fill: h.color, stroke: 'white', 'stroke-width': '2', class: 'runner-circle' }));
+    const text = svgEl('text', { x: '0', y: '5', 'text-anchor': 'middle', 'font-size': '13', style: 'pointer-events:none' });
+    text.textContent = '🏇';
     group.appendChild(text);
     g.appendChild(group);
   });
@@ -147,28 +151,31 @@ function updateProgress(progress) {
     if (finishedSet.has(i)) return;
     const el = document.getElementById(`svgRunner-${i}`);
     if (!el) return;
-    if (pct >= 100) {
-      finishedSet.add(i);
-      triggerFinish(i, finishedSet.size);
-    } else {
-      const pos = lanePos(pct, i);
-      el.setAttribute('transform', `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})`);
-    }
+    // Just move — finish animation is triggered by horseFinished event from server
+    const pos = lanePos(Math.min(pct, 99), i);
+    el.setAttribute('transform', `translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})`);
   });
+}
+
+function onHorseFinished(horse, rank) {
+  if (finishedSet.has(horse)) return;
+  finishedSet.add(horse);
+  triggerFinish(horse, rank);
 }
 
 function triggerFinish(runnerIdx, rank) {
   const h  = horses[runnerIdx];
   if (!h) return;
-  if (rank === 1) flashFinishLine();
+  if (rank === 1) { breakFinishTape(); flashFinishLine(); }
+  showFinishLabel(runnerIdx, rank);
   const el = document.getElementById(`svgRunner-${runnerIdx}`);
   if (!el) return;
   // Start from wherever the runner currently is so there's no jump at the line
   const m = (el.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
-  const startPos = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(100, runnerIdx);
+  const startPos = m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : lanePos(99, runnerIdx);
   const endPos   = lanePos(OVERSHOOT, runnerIdx);
   const t0  = performance.now();
-  const dur = 600;
+  const dur = rank === 1 ? 700 : 500;
   (function step(now) {
     const t     = Math.min((now - t0) / dur, 1);
     const eased = 1 - Math.pow(1 - t, 3);
@@ -177,6 +184,66 @@ function triggerFinish(runnerIdx, rank) {
     el.setAttribute('transform', `translate(${x.toFixed(1)},${y.toFixed(1)})`);
     if (t < 1) requestAnimationFrame(step);
     else addFinishPulse(x, y, h.color);
+  })(t0);
+}
+
+function showFinishLabel(runnerIdx, rank) {
+  const h   = horses[runnerIdx];
+  if (!h) return;
+  const svg = document.getElementById('trackSVG');
+  const pos = lanePos(100, runnerIdx);
+  const labels = ['🥇 1着!', '🥈 2着', '🥉 3着'];
+  const label  = rank <= 3 ? labels[rank - 1] : `${rank}着`;
+  const bgW    = rank === 1 ? 56 : 44;
+  const fSize  = rank === 1 ? 12 : 10;
+  const bgFill = rank === 1 ? 'rgba(180,130,0,0.92)' : 'rgba(30,30,30,0.80)';
+
+  const g   = svgEl('g', { opacity: '0' });
+  const bg  = svgEl('rect', { x: `${-bgW/2}`, y: '-13', width: `${bgW}`, height: '18', rx: '6', fill: bgFill });
+  const txt = svgEl('text', { x: '0', y: '1', 'text-anchor': 'middle', fill: 'white',
+    'font-size': `${fSize}`, 'font-weight': 'bold', 'font-family': 'sans-serif' });
+  txt.textContent = label;
+  g.appendChild(bg); g.appendChild(txt);
+  // Float toward infield center so label stays on-screen
+  const offX = (pos.x - CX) * 0.15;
+  const offY = (pos.y - CY) * 0.15;
+  g.setAttribute('transform', `translate(${(pos.x - offX).toFixed(1)},${(pos.y - offY - 18).toFixed(1)})`);
+  svg.appendChild(g);
+
+  const t0  = performance.now();
+  const dur = rank === 1 ? 1800 : 1200;
+  const baseX = pos.x - offX;
+  const baseY = pos.y - offY - 18;
+  (function anim(now) {
+    const t  = Math.min((now - t0) / dur, 1);
+    const dy = t * 30;
+    const op = t < 0.12 ? t / 0.12 : t > 0.65 ? (1 - t) / 0.35 : 1;
+    g.setAttribute('transform', `translate(${baseX.toFixed(1)},${(baseY - dy).toFixed(1)})`);
+    g.setAttribute('opacity', Math.max(0, op).toFixed(2));
+    if (t < 1) requestAnimationFrame(anim);
+    else g.remove();
+  })(t0);
+}
+
+function breakFinishTape() {
+  const tape = document.getElementById('finishTape');
+  if (!tape) return;
+  // Flash white then shred apart (two halves flying outward)
+  const svg = document.getElementById('trackSVG');
+  const top  = svgEl('line', { x1:'290', y1:'9',  x2:'290', y2:'52', stroke:'#ff3333', 'stroke-width':'3', 'stroke-linecap':'round' });
+  const bot  = svgEl('line', { x1:'290', y1:'52', x2:'290', y2:'95', stroke:'#ff3333', 'stroke-width':'3', 'stroke-linecap':'round' });
+  tape.setAttribute('opacity', '0');
+  svg.appendChild(top); svg.appendChild(bot);
+  const t0 = performance.now();
+  (function anim(now) {
+    const t = Math.min((now - t0) / 500, 1);
+    const op = (1 - t).toFixed(2);
+    // top half flies left-up, bottom half flies right-down
+    top.setAttribute('transform', `translate(${(-t * 18).toFixed(1)},${(-t * 10).toFixed(1)})`);
+    bot.setAttribute('transform', `translate(${(t * 18).toFixed(1)},${(t * 10).toFixed(1)})`);
+    top.setAttribute('opacity', op); bot.setAttribute('opacity', op);
+    if (t < 1) requestAnimationFrame(anim);
+    else { top.remove(); bot.remove(); }
   })(t0);
 }
 
