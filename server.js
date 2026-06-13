@@ -319,9 +319,8 @@ function startRace(roomId) {
       maxShown[i]   = Math.min(targetProgress, Math.round(natural * targetProgress));
       room.raceProgress[i] = maxShown[i];
 
-      // Fire when runner reaches ~95% progress (visual tape position at x≈220, 84% of race time)
-      // Rank order is preserved since all ft[] are scaled by the same ratio
-      if (!finished.has(i) && tick >= Math.round(ft[i] * 0.84)) {
+      // Fire when runner reaches 90% of total distance — tape-break aligns with visual crossing
+      if (!finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.90)) {
         finished.add(i);
         finishRank++;
         newFinishers.push({ horse: i, rank: finishRank });
