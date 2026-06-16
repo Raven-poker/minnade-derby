@@ -288,10 +288,13 @@ function startRace(roomId) {
     if (Math.random() < p) makuriSet.add(i);
   });
 
+  // baseShown: pure ease+noise only — determines finish ORDER (kick/boost excluded)
+  // maxShown:  full visual with kick/boost — what gets broadcast for animation
+  const baseShown  = room.horses.map(() => 0);
   const maxShown   = room.horses.map(() => 0);
   const finished   = new Set();
   let   finishRank = 0;
-  room.finishOrder = [];  // populated in order horses cross 95% mark
+  room.finishOrder = [];
 
   let tick = 0;
   const iv = setInterval(() => {
@@ -300,7 +303,7 @@ function startRace(roomId) {
 
     // Pass 1: update all progress values
     room.horses.forEach((h, i) => {
-      if (room.raceProgress[i] >= targetProgress) return;
+      if (finished.has(i)) return;
       const t    = Math.min(tick / ft[i], 1.0);
       const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
       const ht   = h.horseType || 'normal';
@@ -312,21 +315,26 @@ function startRace(roomId) {
       let kick = 0;
       if (makuriSet.has(i)) {
         kick = ht === 'sashi'
-          ? (t > 0.65 ? Math.min(0.08, (t - 0.65) * 0.267) : 0)
-          : (t > 0.75 ? Math.min(0.05, (t - 0.75) * 0.20)  : 0);
+          ? (t > 0.80 ? Math.min(0.04, (t - 0.80) * 0.20) : 0)
+          : (t > 0.75 ? Math.min(0.05, (t - 0.75) * 0.20) : 0);
       }
 
-      const noise   = (Math.random() - 0.5) * 0.012;
-      const natural = Math.max(maxShown[i] / targetProgress, ease + kick + earlyBoost + noise);
-      maxShown[i]   = Math.min(targetProgress, Math.round(natural * targetProgress));
+      const noise = (Math.random() - 0.5) * 0.012;
+
+      // Base (no kick/boost): used exclusively for finish-order determination
+      const baseNat  = Math.max(baseShown[i] / targetProgress, ease + noise);
+      baseShown[i]   = Math.min(targetProgress, Math.round(baseNat * targetProgress));
+
+      // Visual (with kick/boost): broadcast for SVG animation
+      const visNat   = Math.max(maxShown[i] / targetProgress, ease + kick + earlyBoost + noise);
+      maxShown[i]    = Math.min(targetProgress, Math.round(visNat * targetProgress));
       room.raceProgress[i] = maxShown[i];
     });
 
-    // Pass 2: collect horses that crossed 95% this tick, sort by ft[] to resolve
-    // same-tick ties correctly (lower ft = earlier finisher), then assign ranks
+    // Pass 2: collect horses whose BASE progress crossed 95%, sort by ft[] for ties
     const crossed = room.horses
       .map((_, i) => i)
-      .filter(i => !finished.has(i) && maxShown[i] >= Math.round(targetProgress * 0.95));
+      .filter(i => !finished.has(i) && baseShown[i] >= Math.round(targetProgress * 0.95));
     crossed.sort((a, b) => ft[a] - ft[b]);
     crossed.forEach(i => {
       finished.add(i);
